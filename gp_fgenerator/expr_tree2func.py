@@ -13,7 +13,7 @@ def tree2func(tree, dict_ephemeral, x):
     code_object = compile(str_code, '<string>', 'exec')
     module = type(sys)('my_module')
     exec(code_object, module.__dict__)
-    return module.func
+    return module.func, str_f
 # END DEF
     
 #%%

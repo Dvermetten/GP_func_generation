@@ -7,7 +7,6 @@ import importlib
 import numpy as np
 import pandas as pd
 from multiprocessing import Pool, cpu_count
-from .visualization import Visualizer
 
 
 
@@ -45,7 +44,7 @@ def eval_af(path_output, label_af):
 # export pickle
 def export_pickle(filepath, data):
     with open(filepath, 'wb') as handle:
-        pickle.dump(data, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle.dump(data, handle)
 # END DEF
 
 #%%
@@ -156,34 +155,131 @@ def dataCleaning(df_data,
 # END DEF
 
 #%%
-def plot_surface(xdoe, ydoe, dir_out, label):
-    if not (os.path.isdir(dir_out)):
-        os.makedirs(dir_out)
-    visu = Visualizer()
-    x_data = pd.DataFrame(xdoe, columns=['x', 'y'])
-    y_data = pd.DataFrame(ydoe, columns=['z'])
-    df_plot = pd.concat([x_data, y_data], axis=1)
-    dict_plot = {'df_data': df_plot,
-                 'x_name': 'x',
-                 'y_name': 'y',
-                 'z_name': 'z',
-                 'surface3d': True,
-                 'scatter3d': False,
-                 'alpha_surf': 1.0,
-                 'angle': (45,-135),
-                 'xbound': (-4,4),
-                 'ybound': (-4,4),
-                 'cbar_label': 'f'}
-    figname = f'plot_3d_{label}'
-    visu.plotSingle3D('scatter3Dplot', title='', dir_out=dir_out, figname=figname, figformat='.png', figsize=(6,3), dpi=300, show=False,
-                        xlim=(None,None), ylim=(None,None), zlim=(None,None), 
-                        xlabel='x', ylabel='y', zlabel='', **dict_plot)
-# END DEF
-
-#%%
 def runParallelFunction(runFunction, arguments, np=1):
     p = Pool(min(cpu_count(), len(arguments), np))
     results = p.map(runFunction, arguments)
     p.close()
     return results
+# END DEF
+
+#%%
+def dropFeatCorr(df_data, corr_thres=0.9, corr_method='pearson', mode='pair', ignore_keys=[], verbose=True):
+    df_data_orig = copy.deepcopy(df_data)
+    df_data_corr = df_data_orig.corr(method=corr_method)
+    df_data_corr.index.names = ['feat_name']
+    
+    # get upper triangle form of the correlation matrix
+    df_upper_tri = df_data_corr.where(np.triu(np.ones(df_data_corr.shape),k=1).astype(np.bool))
+        
+    if (mode == 'pair'):
+        # remove feature with correlation exceeding threshold AND higher mean correlation wirh rest features
+        # get all correlated pairs exceed correlation threshold (positive and negative correlation)
+        list_corr_pair = []
+        for column in df_upper_tri.columns:
+            df_temp = abs(df_upper_tri[column]) >= corr_thres
+            list_feat = list(df_temp.index[df_temp].values)
+            for feat in list_feat:
+                list_pair = []
+                list_pair.append(column)
+                list_pair.append(feat)
+                list_corr_pair.append(list_pair)
+        
+        # from a correlated pair, get and drop the feature with a higher correlation with other remaining features
+        list_featA = []
+        list_featB = []
+        list_featA_corr = []
+        list_featB_corr = []
+        list_corr = []
+        col_to_drop = []
+        df_corr_temp = copy.deepcopy(df_data_corr)
+        df_corr_temp.reset_index(inplace=True)
+        for corr_pair in list_corr_pair:
+            featA = corr_pair[0]
+            featB = corr_pair[-1]
+            
+            # first feature A
+            # ignore self-correlation and correlation with feature B
+            df_corr_remainA = df_corr_temp.loc[df_corr_temp['feat_name'] == featA, (df_corr_temp.columns != featA) & (df_corr_temp.columns != featB)]
+            df_corr_remainA.drop(['feat_name'], axis=1, inplace=True)
+            corr_remainA = abs(df_corr_remainA).mean(axis=1).values[-1]
+            
+            # second feature B
+            # ignore self-correlation and correlation with feature A
+            df_corr_remainB = df_corr_temp.loc[df_corr_temp['feat_name'] == featB, (df_corr_temp.columns != featB) & (df_corr_temp.columns != featA)]
+            df_corr_remainB.drop(['feat_name'], axis=1, inplace=True)
+            corr_remainB = abs(df_corr_remainB).mean(axis=1).values[-1]
+            
+            if (corr_remainA > corr_remainB):
+                col_to_drop.append(featA)
+            else:
+                col_to_drop.append(featB)
+            
+            # save results
+            list_featA.append(featA)
+            list_featB.append(featB)
+            list_featA_corr.append(corr_remainA)
+            list_featB_corr.append(corr_remainB)
+            list_corr.append(df_corr_temp.loc[df_corr_temp['feat_name'] == featA, (df_corr_temp.columns == featB)].values[-1][-1])    
+        # END FOR
+        
+        # drop duplicated features
+        set_col_to_drop = list(set(col_to_drop))
+        list_to_drop = copy.deepcopy(set_col_to_drop)
+        
+        # ignore certain features
+        if (ignore_keys):
+            list_to_ignore = []
+            for col2drop in set_col_to_drop:
+                for key2ignore in ignore_keys:
+                    if (key2ignore in col2drop):
+                        list_to_drop.remove(col2drop)
+                        list_to_ignore.append(col2drop)
+                        break
+            list_to_drop = list(set(list_to_drop))
+            if (verbose):
+                print(f'Following {len(list_to_ignore)} features have been enforced/ignored: {list_to_ignore}.\n')
+        if (verbose):
+            print(f'Following {len(list_to_drop)} highly correlated features > {corr_thres} have been dropped: {list_to_drop}.\n')
+        # END IF
+        
+        dict_featpair = {}
+        dict_featpair['featA'] = list_featA
+        dict_featpair['featB'] = list_featB
+        dict_featpair['corrA_mean'] = list_featA_corr
+        dict_featpair['corrB_mean'] = list_featB_corr
+        dict_featpair['corr_pair'] = list_corr
+        df_featpair = pd.DataFrame.from_dict(dict_featpair)
+        df_data_orig = df_data_orig.drop(list_to_drop, axis=1)
+        return df_data_orig, df_featpair
+    
+    elif (mode == 'direct'):
+        # remove feature with correlation exceeding threshold
+        # get all correlated pairs exceed correlation threshold (positive and negative correlation)
+        list_corr_pair = [column for column in df_upper_tri.columns if any(df_upper_tri[column] > corr_thres)]
+        if (verbose):
+            print(f'Following {len(list_corr_pair)} highly correlated features > {corr_thres} have been dropped: {list_corr_pair}.\n')
+        df_data_orig.drop(list_corr_pair, axis=1, inplace=True)
+        return df_data_orig
+    else:
+        raise NotImplementedError
+# END DEF
+
+#%%
+def logger2csv(filepath, logger):
+    data = pd.DataFrame()
+    for i in range(len(logger)):
+        df_ = pd.DataFrame(logger[i].items()).set_index(0).T
+        data = pd.concat([data, df_], axis=0, ignore_index=True)
+    data.to_csv(filepath, index=False)
+# END DEF
+
+#%%
+def fitness2df(fitness, label=''):
+    data = {'neval': [label],
+            'fitness': [fitness[1]],
+            'strf': [fitness[2]]}
+    data = pd.DataFrame.from_dict(data)
+    if (fitness[0] == 'success'):
+        data = pd.concat([data, fitness[3]], axis=1)
+    return data
 # END DEF

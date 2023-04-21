@@ -1,9 +1,11 @@
 
+import os
 from deap.gp import Primitive
 from deap import creator
 from .expr_inject import Node
 from .expr_clean import cleaning1, cleaning2
 from .expr_tree2func import tree2func
+from .utils import write_file
 
 
 #%%
@@ -58,8 +60,8 @@ def expr2func(expr, pset, x):
     cleaning2(tree)
     cleaning1(tree)
     cleaning2(tree)
-    func_ = tree2func(tree, dict_ephemeral, x)
-    return func_
+    func_, strf_ = tree2func(tree, dict_ephemeral, x)
+    return func_, strf_
 # END DEF
 
 #%%

@@ -1,8 +1,6 @@
 
-import copy
 import numpy as np
 from deap import gp
-
 
 
 #%%
@@ -13,15 +11,12 @@ class create_pset:
     def __call__(self):
         pset = gp.PrimitiveSet('MAIN', 1)
         pset.addEphemeralConstant('rand_num', lambda: np.random.random()*9+1) #1
-        # pset.addTerminal(rand_num(), name='rand_num') #1
         pset.addTerminal(self.x_(), name='x_') #2
         pset.addTerminal(self.first_dv(), name='first_dv') #3
         pset.addTerminal(self.trans_dv(), name='trans_dv') #4
         pset.addEphemeralConstant('rot_mat', lambda: self.rot_mat()) #5
-        # pset.addTerminal(self.rot_mat(), name='rot_mat') #5
         pset.addTerminal(self.index_vec(), name='index_vec') #6
         pset.addEphemeralConstant('rand_mat', lambda: self.rand_mat()) #7
-        # pset.addTerminal(self.rand_mat(), name='rand_mat') #7
         pset.addPrimitive(add, 2) #11
         pset.addPrimitive(sub, 2) #12
         pset.addPrimitive(mul, 2) #13
