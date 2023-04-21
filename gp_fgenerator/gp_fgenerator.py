@@ -9,6 +9,7 @@ from .pset import create_pset
 from .symb_regression import symb_regr
 from .utils import write_file, logger2csv, fitness2df
 from deap import algorithms, base, creator, tools, gp
+from scoop import futures
 
 
 
@@ -89,6 +90,7 @@ class GP_func_generator:
         creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMin)
         
         self.toolbox = base.Toolbox()
+        self.toolbox.register("map", futures.map)
         self.toolbox.register("expr", gp.genHalfAndHalf, pset=self.pset, min_=self.tree_size[0], max_=self.tree_size[1])
         self.toolbox.register("individual", tools.initIterate, creator.Individual, self.toolbox.expr)
         self.toolbox.register("population", tools.initRepeat, list, self.toolbox.individual)

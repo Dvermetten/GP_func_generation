@@ -10,7 +10,7 @@ from preliminary.get_ela_target import get_ela_target
     
 #%%
 def main():
-    dim = 2
+    dim = 10
     ndoe = 150*dim
     np = 8
     

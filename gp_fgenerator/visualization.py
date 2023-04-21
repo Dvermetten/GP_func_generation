@@ -55,6 +55,7 @@ def plot_barplot(data, path_dir, label=''):
     matplotlib.rcParams['pdf.fonttype'] = 42
     matplotlib.rcParams['ps.fonttype'] = 42
     fig, ax = plt.subplots(figsize=(18, 3) ,dpi=300)
+    plt.axhline(y=data['dist'].mean(), color='k', linestyle='--')
     sns.boxplot(data=data, x='label', y='dist', palette=sns.color_palette('tab10', 1))
     if not (os.path.isdir(path_dir)):
         os.makedirs(path_dir)
