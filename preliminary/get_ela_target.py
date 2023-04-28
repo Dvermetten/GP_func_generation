@@ -16,9 +16,9 @@ def setup(dim, list_iid, path_base, fid):
     for iid in list_iid:
         filepath = os.path.join(os.getcwd(), f'results_ela_{dim}d', f'ela_bbob_f{fid}_ins{iid}.csv')
         ela_ = pd.read_csv(filepath)
-        ela_ = ela_.mean(axis=0).to_frame().T
+        # ela_ = ela_.mean(axis=0).to_frame().T
         df_ela = pd.concat([df_ela, ela_], axis=0, ignore_index=True)
-    df_ela = df_ela.mean(axis=0).to_frame().T
+    # df_ela = df_ela.mean(axis=0).to_frame().T
     filepath = os.path.join(path_base, f'ela_bbob_target_f{fid}.csv')
     df_ela.to_csv(filepath, index=False)
     

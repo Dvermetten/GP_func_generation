@@ -4,14 +4,13 @@ import random
 import operator
 import numpy as np
 import pandas as pd
-from functools import partial
-from .pset import create_pset
+from .create_pset import create_pset
 from .symb_regression import symb_regr
-from .utils import write_file, logger2csv, fitness2df
+from .utils import logger2csv, fitness2df, result2csv
+from .initialize_tree import genHalfAndHalf_
 from deap import algorithms, base, creator, tools, gp
 from scoop import futures
-
-
+from functools import partial
 
 
 #%%
@@ -64,43 +63,52 @@ class GP_func_generator:
         self.fopt = np.inf if self.minimization else -1.0*np.inf
         self.result = pd.DataFrame()
         self.id_best = np.inf
+        self.err = {'syntax_err': 0,
+                    'y_err': 0,
+                    'ela_err': 0,
+                    'dist_err': 0,
+                    'success': 0}
         if not (os.path.isdir(self.filepath_save)):
             os.makedirs(self.filepath_save)
     
     #%%
     def evalSymbReg(self, individual, points):
         self.neval += 1
-        f_ = partial(symb_regr, self.pset, self.target_vector, self.bs_ratio, self.bs_repeat, 
-                     self.list_ela, self.ela_min, self.ela_max, self.ela_weight, self.dist_metric, self.verbose)
-        fitness_ = f_(individual, points)
-        self.result = pd.concat([self.result, fitness2df(fitness_, label=f'{self.neval}')], axis=0, ignore_index=True)
+        func_ = self.toolbox.compile(expr=individual)
+        fitness_ = symb_regr(func_, self.target_vector, self.bs_ratio, self.bs_repeat, self.list_ela, self.ela_min, self.ela_max, 
+                             self.ela_weight, self.dist_metric, self.verbose, points)
+        self.err[fitness_[0]] += 1
+        self.result = pd.concat([self.result, fitness2df(str(individual), fitness_, label=f'{self.neval}')], axis=0, ignore_index=True)
         if (fitness_[1] < self.fopt):
             self.fopt = fitness_[1]
             self.id_best = self.neval
         if (self.verbose):
-            print(f'neval: {self.neval}, fitness: {fitness_[1]}; fopt: {self.fopt}; id_best: {self.id_best}')
+            print(f'[GPFG] neval: {self.neval}, {fitness_[0]}, f: {fitness_[1]}; fbest: {self.fopt}; id_best: {self.id_best}')
         return fitness_[1],
     
     #%%    
     def __call__(self):
+        if (self.verbose):
+            print(f'[GPFG] Started for {self.problem_label}; Pop: {self.population}; Gen: {self.ngen}.')
         np.random.seed(self.seed)
         random.seed(self.seed+10)
-        self.pset = create_pset(self.doe_x)()
+        pset = create_pset()
+        genHalfAndHalf = partial(genHalfAndHalf_, self.doe_x)
         creator.create("FitnessMin", base.Fitness, weights=(self.weight,))
         creator.create("Individual", gp.PrimitiveTree, fitness=creator.FitnessMin)
         
         self.toolbox = base.Toolbox()
         self.toolbox.register("map", futures.map)
-        self.toolbox.register("expr", gp.genHalfAndHalf, pset=self.pset, min_=self.tree_size[0], max_=self.tree_size[1])
+        self.toolbox.register("expr", genHalfAndHalf, pset=pset, min_=self.tree_size[0], max_=self.tree_size[1])
         self.toolbox.register("individual", tools.initIterate, creator.Individual, self.toolbox.expr)
         self.toolbox.register("population", tools.initRepeat, list, self.toolbox.individual)
-        self.toolbox.register("compile", gp.compile, pset=self.pset)
+        self.toolbox.register("compile", gp.compile, pset=pset)
         
         self.toolbox.register("evaluate", self.evalSymbReg, points=self.doe_x)
-        self.toolbox.register("select", tools.selTournament, tournsize=3)
+        self.toolbox.register("select", tools.selTournament, tournsize=5) # 4 to 7
         self.toolbox.register("mate", gp.cxOnePoint)
         self.toolbox.register("expr_mut", gp.genFull, min_=0, max_=2)
-        self.toolbox.register("mutate", gp.mutUniform, expr=self.toolbox.expr_mut, pset=self.pset)
+        self.toolbox.register("mutate", gp.mutUniform, expr=self.toolbox.expr_mut, pset=pset)
         
         self.toolbox.decorate("mate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
         self.toolbox.decorate("mutate", gp.staticLimit(key=operator.attrgetter("height"), max_value=17))
@@ -118,10 +126,9 @@ class GP_func_generator:
     
         pop, logger = algorithms.eaSimple(pop, self.toolbox, self.cxpb, self.mutpb, self.ngen, stats=mstats,
                                           halloffame=hof, verbose=self.verbose)
-        self.result.to_csv(os.path.join(self.filepath_save, 'gpfg_opt_data.csv'), index=False)
-        logger2csv(os.path.join(self.filepath_save, 'gpfg_gen.csv'), logger)
-        write_file(os.path.join(self.filepath_save, 'tree_id_best.txt'), [f'id_best: {self.id_best}'])
+        result2csv(self.filepath_save, self.result, self.id_best)
+        logger2csv(os.path.join(self.filepath_save, 'gpfg_logger.csv'), logger)
         if (self.verbose):
-            print('[GPFG] Optimization for symbolic regression done.')
+            print(f'[GPFG] Finished: {self.err}; Success rate: {self.err["success"]/self.neval}.')
         return hof, pop
 # END CLASS

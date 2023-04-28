@@ -4,6 +4,7 @@ import statistics
 import numpy as np
 import pandas as pd
 from scipy import spatial
+from scipy.stats import wasserstein_distance
 from sklearn.utils import resample
 import pflacco.classical_ela_features as pflacco_ela
 from gp_fgenerator.utils import dataCleaning
@@ -77,3 +78,12 @@ def diff_vector(candidate_vector, target_vector, list_ela=[], dict_min={}, dict_
         list_dist.append(dist_)
     return statistics.fmean(list_dist)
 # END DEF
+
+#%%
+def dist_wasserstein(candidate_vector, target_vector, list_ela=[], dict_min={}, dict_max={}, dict_weight={}):
+    cand_, targ_ = process_ela(candidate_vector, target_vector, list_ela=list_ela, dict_min=dict_min, dict_max=dict_max, dict_weight=dict_weight)
+    list_dist = []
+    for ela in cand_.keys():
+        list_dist.append(wasserstein_distance(list(cand_[ela]), list(targ_[ela])))
+    return statistics.fmean(list_dist)
+# END DEF        

@@ -1,6 +1,7 @@
 
 import os
 import sys
+import dill
 import copy
 import pickle
 import importlib
@@ -274,12 +275,23 @@ def logger2csv(filepath, logger):
 # END DEF
 
 #%%
-def fitness2df(fitness, label=''):
+def fitness2df(strf, fitness, label=''):
     data = {'neval': [label],
+            'status': [fitness[0]],
             'fitness': [fitness[1]],
-            'strf': [fitness[2]]}
+            'strf': [strf]}
     data = pd.DataFrame.from_dict(data)
     if (fitness[0] == 'success'):
-        data = pd.concat([data, fitness[3]], axis=1)
+        data = data.append([data]*(len(fitness[2])-1), ignore_index=True)
+        data = pd.concat([data, fitness[2]], axis=1)
     return data
+# END DEF
+
+#%%
+def result2csv(filepath, result, id_best):
+    result.to_csv(os.path.join(filepath, 'gpfg_opt_runs.csv'), index=False)
+    strf_ = result[result['neval']==str(id_best)]['strf'].iloc[-1]
+    df_ = pd.DataFrame.from_dict({'neval': [id_best],
+                                  'strf': [strf_]})
+    df_.to_csv(os.path.join(filepath, 'gpfg_best.csv'), index=False)
 # END DEF
